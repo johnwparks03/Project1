@@ -174,7 +174,23 @@ class AsynchronousValueIterationAgent(ValueIterationAgent):
         ValueIterationAgent.__init__(self, mdp, discount, iterations)
 
     def runValueIteration(self):
-        "*** YOUR CODE HERE ***"
+
+        #Get mdp states
+        states = self.mdp.getStates()
+
+        #Initialize all state values to 0
+        for state in states:
+            self.values[state] = 0
+
+        for i in range(self.iterations):
+            state = states[i % len(states)]
+            isTerminal = self.mdp.isTerminal(state)
+
+            #If not in a terminal state get action and corresponding q_value then update the state value
+            if not isTerminal:
+                action = self.getAction(state)
+                q_value = self.getQValue(state, action)
+                self.values[state] = q_value
 
 class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
     """
@@ -194,5 +210,50 @@ class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
         ValueIterationAgent.__init__(self, mdp, discount, iterations)
 
     def runValueIteration(self):
-        "*** YOUR CODE HERE ***"
+        states = self.mdp.getStates()
+        predecessors = {}
+        priorityQueue = util.PriorityQueue()
+        possible_moves=['north', 'south','east', 'west']
 
+        for state in states:
+            self.values[state] = 0
+            #Add state predecessors to the dict
+            state_predecessors = set()
+
+            if not self.mdp.isTerminal(state):
+                for predecessor in states:
+                    isTerminal = self.mdp.isTerminal(predecessor)
+                    possible_actions = self.mdp.getPossibleActions(predecessor)
+                    if not isTerminal:
+                        for move in possible_moves:
+                            if move in possible_actions:
+                                transition = self.mdp.getTransitionStatesAndProbs(predecessor, move)
+                                for s_prime, T in transition:
+                                    if(s_prime == state) and (T > 0):
+                                        state_predecessors.add(predecessor)
+            predecessors[state] = state_predecessors
+
+
+        for s in states:
+            isTerminal = self.mdp.isTerminal(s)
+            #If state is not terminal calculate diff between maximum q-value and current value
+            if not isTerminal:
+                current_state_value = self.values[s]
+                diff = abs(current_state_value - self.get_max_q_value(s))
+                #Push to the priority queue with -diff because of min-heap
+                priorityQueue.push(s, -diff)
+
+        for i in range(self.iterations):
+            if priorityQueue.isEmpty():
+                return
+            state = priorityQueue.pop()
+            self.values[state] = self.get_max_q_value(state)
+
+            for predecessor in predecessors[state]:
+                predecessor_max_q_value = self.get_max_q_value(predecessor)
+                diff = abs(self.values[predecessor] - predecessor_max_q_value)
+                if diff > self.theta:
+                    priorityQueue.update(predecessor, -diff)
+    
+    def get_max_q_value(self, state):
+        return max([self.getQValue(state, action) for action in self.mdp.getPossibleActions(state)])
